@@ -685,3 +685,199 @@ export async function parseApplicationDetailsWithGemini(
     throw new Error("Failed to parse application details with AI.");
   }
 }
+
+/**
+ * Application Coach system instruction for conversational application creation.
+ * This specialized prompt guides the AI to conduct a natural conversation while
+ * systematically collecting all required application fields.
+ */
+const applicationCoachContext = `
+You are the Application Coach, an empathetic AI assistant helping applicants create their disaster relief application through natural conversation.
+
+**YOUR PRIMARY ROLE**:
+- Guide applicants through the application process conversationally
+- Extract structured information from natural dialogue
+- Ask clarifying questions when information is unclear or incomplete
+- Validate responses in real-time
+- Maintain an empathetic, supportive tone
+
+**REQUIRED INFORMATION TO COLLECT**:
+
+1. **Applicant Identity** (if not already in profile):
+   - Full name (first, middle, last, suffix)
+   - Contact information (mobile number)
+   - Primary address (street, city, state, ZIP, country)
+   - Employment start date
+   - Employment type (eligibility type)
+   - Household income and size
+   - Homeowner status (Yes/No)
+
+2. **Disaster Event Details**:
+   - Event type (from eligible events list)
+   - Event name (for hurricanes/tropical storms)
+   - Event date (YYYY-MM-DD format)
+   - Requested relief amount
+
+3. **Event Impact** (ask based on event type):
+   - Evacuation status (Yes/No)
+   - If evacuated:
+     * Evacuating from primary residence? (Yes/No)
+     * Stayed with family/friends? (Yes/No)
+     * Evacuation start date
+     * Number of nights evacuated
+   - Power loss (Yes/No)
+   - If power loss: Number of days without power
+   - Additional details about their situation
+
+**CONVERSATIONAL GUIDELINES**:
+
+1. **Be Natural**: Don't interrogate. Have a conversation. Listen to what they share and ask follow-up questions naturally.
+
+2. **Be Empathetic**: Remember they're under stress from a disaster. Use supportive language:
+   - "I'm sorry to hear about that."
+   - "That sounds very difficult."
+   - "I understand how challenging this must be."
+
+3. **Confirm Understanding**: Periodically summarize what you've learned:
+   - "Just to make sure I have this right: you experienced [event] on [date] and are requesting $[amount]. Is that correct?"
+
+4. **Handle Redirections**: If they go off-topic, gently redirect:
+   - "I understand. To help with your application, I need to know..."
+
+5. **Validate as You Go**:
+   - Dates should be in YYYY-MM-DD format and recent (within 90 days)
+   - Amounts should be positive numbers
+   - Required fields should not be empty
+   - Event must be from the eligible events list
+
+6. **Be Concise**: Keep your responses short and focused. Don't overwhelm them with too many questions at once.
+
+7. **Use Tools**: When you collect information, use the \`updateUserProfile\` or \`startOrUpdateApplicationDraft\` tools to save it immediately.
+
+**COMPLETION DETECTION**:
+Once you have collected ALL required fields listed above, inform them:
+"Your application is now ready for review! I've gathered all the necessary information. You can review and edit the details before submitting."
+
+**RESPONSE STYLE**:
+- Keep responses to 2-3 sentences maximum
+- Ask 1-2 questions at a time
+- Use bullet points only when listing options
+- Use hyphens for bullets (not asterisks)
+- Be conversational, not formal
+`;
+
+/**
+ * Creates a new Application Coach chat session with specialized instructions
+ * for conversational application creation.
+ */
+export function createApplicationCoachSession(
+  userProfile: UserProfile | null,
+  activeFund: Fund | null,
+  history?: ChatMessage[]
+): Chat {
+  let dynamicContext = applicationCoachContext;
+
+  // Add language preference
+  if (userProfile && userProfile.preferredLanguage && userProfile.preferredLanguage.toLowerCase() !== 'english') {
+    dynamicContext += `\n**User's Language Preference**: The user's preferred language is ${userProfile.preferredLanguage}. You MUST respond in ${userProfile.preferredLanguage}.`;
+  }
+
+  // Add fund-specific context
+  if (activeFund) {
+    const limits = activeFund.limits;
+    const allCoveredEvents = [...activeFund.eligibleDisasters, ...activeFund.eligibleHardships];
+
+    const fundDetails = `
+**Fund Information (${activeFund.name})**:
+- Single Request Maximum: $${limits.singleRequestMax.toLocaleString()}
+- 12-Month Maximum: $${limits.twelveMonthMax.toLocaleString()}
+- Lifetime Maximum: $${limits.lifetimeMax.toLocaleString()}
+
+**Eligible Events for ${activeFund.name}**:
+${allCoveredEvents.map(event => `- ${event}`).join('\n')}
+
+When asking about the event type, you can reference these eligible events.
+`;
+    dynamicContext += fundDetails;
+  }
+
+  // Add current profile context if available
+  if (userProfile) {
+    const profileContext = `
+**User's Current Profile Information**:
+- Name: ${userProfile.firstName} ${userProfile.lastName}
+${userProfile.email ? `- Email: ${userProfile.email}` : ''}
+${userProfile.mobileNumber ? `- Mobile: ${userProfile.mobileNumber}` : ''}
+${userProfile.primaryAddress?.city ? `- Location: ${userProfile.primaryAddress.city}, ${userProfile.primaryAddress.state}` : ''}
+
+You may skip asking for information that's already in the profile, unless the user wants to update it.
+`;
+    dynamicContext += profileContext;
+  }
+
+  const model = 'gemini-2.5-flash';
+
+  const mappedHistory: Content[] | undefined = history?.map(message => ({
+    role: message.role,
+    parts: [{ text: message.content }],
+  }));
+
+  return ai.chats.create({
+    model: model,
+    history: mappedHistory,
+    config: {
+      systemInstruction: dynamicContext,
+      tools: [{ functionDeclarations: [updateUserProfileTool, startOrUpdateApplicationDraftTool] }],
+    },
+  });
+}
+
+/**
+ * Checks if all required application fields have been collected.
+ * Returns an object indicating completion status and any missing fields.
+ */
+export function checkApplicationCompleteness(
+  profileData: Partial<UserProfile>,
+  eventData: Partial<EventData>
+): { isComplete: boolean; missingFields: string[] } {
+  const missingFields: string[] = [];
+
+  // Check required profile fields
+  if (!profileData.firstName) missingFields.push('First Name');
+  if (!profileData.lastName) missingFields.push('Last Name');
+  if (!profileData.mobileNumber) missingFields.push('Mobile Number');
+  if (!profileData.primaryAddress?.street1) missingFields.push('Street Address');
+  if (!profileData.primaryAddress?.city) missingFields.push('City');
+  if (!profileData.primaryAddress?.state) missingFields.push('State');
+  if (!profileData.primaryAddress?.zip) missingFields.push('ZIP Code');
+  if (!profileData.primaryAddress?.country) missingFields.push('Country');
+  if (!profileData.employmentStartDate) missingFields.push('Employment Start Date');
+  if (!profileData.eligibilityType) missingFields.push('Employment Type');
+  if (!profileData.householdIncome && profileData.householdIncome !== 0) missingFields.push('Household Income');
+  if (!profileData.householdSize && profileData.householdSize !== 0) missingFields.push('Household Size');
+  if (!profileData.homeowner) missingFields.push('Homeowner Status');
+
+  // Check required event fields
+  if (!eventData.event) missingFields.push('Event Type');
+  if (!eventData.eventDate) missingFields.push('Event Date');
+  if (!eventData.requestedAmount && eventData.requestedAmount !== 0) missingFields.push('Requested Amount');
+  if (!eventData.evacuated) missingFields.push('Evacuation Status');
+  if (!eventData.powerLoss) missingFields.push('Power Loss Status');
+
+  // Check conditional fields
+  if (eventData.evacuated === 'Yes') {
+    if (!eventData.evacuatingFromPrimary) missingFields.push('Evacuating from Primary Residence');
+    if (!eventData.stayedWithFamilyOrFriend) missingFields.push('Stayed with Family/Friend');
+    if (!eventData.evacuationStartDate) missingFields.push('Evacuation Start Date');
+    if (!eventData.evacuationNights && eventData.evacuationNights !== 0) missingFields.push('Evacuation Nights');
+  }
+
+  if (eventData.powerLoss === 'Yes') {
+    if (!eventData.powerLossDays && eventData.powerLossDays !== 0) missingFields.push('Power Loss Days');
+  }
+
+  return {
+    isComplete: missingFields.length === 0,
+    missingFields,
+  };
+}
