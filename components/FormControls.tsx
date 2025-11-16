@@ -49,6 +49,30 @@ export const FormInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & {
 };
 
 
+export const FormSelect: React.FC<{ label?: string, id?: string, options: string[], value: string, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void, required?: boolean, error?: string }> = ({ label, id, options, value, onChange, required, error }) => (
+    <div>
+        {label && (
+            <label htmlFor={id} className="flex items-center text-sm font-medium text-white mb-1">
+                {label} <RequiredIndicator required={required} isMet={!!value} />
+            </label>
+        )}
+        <select
+            id={id}
+            value={value}
+            onChange={onChange}
+            className={`w-full bg-transparent border-0 border-b p-2 text-base text-white focus:outline-none focus:ring-0 ${error ? 'border-red-500' : 'border-[#005ca0] focus:border-[#ff8400]'}`}
+        >
+            <option value="" className="bg-[#004b8d] text-white">Select...</option>
+            {options.map(option => (
+                <option key={option} value={option} className="bg-[#004b8d] text-white">
+                    {option}
+                </option>
+            ))}
+        </select>
+        {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
+    </div>
+);
+
 export const FormRadioGroup: React.FC<{ legend: string, name: string, options: string[], value: string, onChange: (value: any) => void, required?: boolean, error?: string }> = ({ legend, name, options, value, onChange, required, error }) => (
     <div>
         <p className={`flex items-center text-sm font-medium text-white mb-1 ${error ? 'text-red-400' : ''}`}>

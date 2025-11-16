@@ -16,6 +16,7 @@ import RegisterPage from './components/RegisterPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
 import HomePage from './components/HomePage';
 import ApplyPage from './components/ApplyPage';
+import AIApplyPage from './components/AIApplyPage';
 import ProfilePage from './components/ProfilePage';
 import SupportPage from './components/SupportPage';
 import SubmissionSuccessPage from './components/SubmissionSuccessPage';
@@ -296,8 +297,8 @@ function App() {
         return;
     }
 
-    if (targetPage === 'apply' && !isVerifiedAndEligible) {
-        console.log("Gating 'apply' page. User not verified or not eligible.");
+    if ((targetPage === 'apply' || targetPage === 'aiApply') && !isVerifiedAndEligible) {
+        console.log(`Gating '${targetPage}' page. User not verified or not eligible.`);
         setPage('classVerification');
     } else {
         setPage(targetPage);
@@ -665,6 +666,15 @@ function App() {
         return <ClassVerificationPage user={currentUser} onVerificationSuccess={handleVerificationSuccess} onVerificationFailed={handleVerificationFailed} navigate={navigate} verifyingFundCode={verifyingFundCode} />;
       case 'apply':
         return <ApplyPage navigate={navigate} onSubmit={handleApplicationSubmit} userProfile={currentUser} applicationDraft={applicationDraft} mainRef={mainRef} canApply={canApply} activeFund={activeFund} />;
+      case 'aiApply':
+        return <AIApplyPage
+          userProfile={currentUser}
+          activeFund={activeFund}
+          applicationDraft={applicationDraft}
+          updateApplicationDraft={setApplicationDraft}
+          updateUserProfile={handleProfileUpdate}
+          navigate={navigate}
+        />;
       case 'profile':
         return <ProfilePage 
                     navigate={navigate} 

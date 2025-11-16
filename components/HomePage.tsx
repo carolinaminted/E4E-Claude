@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PolicyModal from './PolicyModal';
-import { ApplyIcon, ProfileIcon, SupportIcon, DonateIcon, DashboardIcon } from './Icons';
+import { ApplyIcon, AIApplyIcon, ProfileIcon, SupportIcon, DonateIcon, DashboardIcon } from './Icons';
 import type { Page, UserProfile } from '../types';
 import EligibilityIndicator from './EligibilityIndicator';
 
@@ -28,11 +28,19 @@ const HomePage: React.FC<HomePageProps> = ({ navigate, canApply, userProfile }) 
     const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
 
     const tiles: Tile[] = [
-        { 
-            key: 'apply', 
-            titleKey: 'nav.apply', 
-            icon: <ApplyIcon className="h-9 w-9 sm:h-12 sm:w-12 mb-2 sm:mb-4" />, 
+        {
+            key: 'apply',
+            titleKey: 'nav.apply',
+            icon: <ApplyIcon className="h-9 w-9 sm:h-12 sm:w-12 mb-2 sm:mb-4" />,
             onClick: () => navigate('apply'),
+            disabled: !canApply,
+            disabledTooltipKey: userProfile.classVerificationStatus !== 'passed' ? "homePage.applyTooltipVerification" : "homePage.applyTooltipLimits"
+        },
+        {
+            key: 'aiApply',
+            titleKey: 'AI Apply',
+            icon: <AIApplyIcon className="h-9 w-9 sm:h-12 sm:w-12 mb-2 sm:mb-4" />,
+            onClick: () => navigate('aiApply'),
             disabled: !canApply,
             disabledTooltipKey: userProfile.classVerificationStatus !== 'passed' ? "homePage.applyTooltipVerification" : "homePage.applyTooltipLimits"
         },
